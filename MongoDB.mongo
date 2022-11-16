@@ -1,0 +1,700 @@
+MongoDB
+Download Community edition
+
+set Enviroment variables in system to bin file of MongoDB.
+in bin w'll get three exe files: mongo(shell), mongod(server), mongos(?)
+
+mongod --version
+
+ERROR first time: {"error":"NonExistentPath: Data directory C:\\data\\db\\ not found. Create the missing directory or specify another path using (1) the --dbpath command line option, or (2) by adding the 'storage.dbPath' option in the configuration file."}
+
+once intalled (able to see verion) Server will run automatically as service on each system startup.
+
+SHELL: (remember db is predefined object)
+to start mongodb shell, use command: mongo
+db.version() -> version on mongodb
+db.stats() -> shows status of db
+show dbs -> show available dbs
+use <db name> -> change current db
+show collections -> show available collections in current db
+
+NOTE:
+mongodb-->install-->Physical database
+now we can make logical databases as much using "use <db_name>" 
+(db created dynamically when a collection/document is added)
+
+Starter Operations:
+==================
+use <db_name>
+db.createCollection("<collection_name>") // or when document is inserted it will creat dynamically
+
+Drop:
+=====
+db.<collection_name>.drop() // to delete a collection
+use <db_name> -> db.dropDatabase() // to delete a database
+
+current DB:
+==========
+db.getName()
+
+*** CRUD ***
+
+Create: with comparision/logical/some array operations
+=======
+db.<collection_name>.insetOne()
+db.<collection_name>.insertMany()
+db.<collection_name>.insert()
+
+capped collection:
+==================
+db.createCollection(<collection_name>, [options])
+e.g. db.createCollection("employees", {capped: ture, size: 3736578, max: 1000})
+NOTE: if exceed any condition, Old doc. will get deleted automatically.
+
+
+Read:
+=====
+db.<collection_name>.find() // return all query with empty patameter & returns array of Objects always
+db.<collection_name>.findOne() // return first inserted doc with empty paramerter & returns an Object
+
+Syntax:	
+	db.<collection_name>.find({<condition>}, {<projection>}) 
+		only projection is not allowed
+		return empty array if condition not match
+	db.employees.find({}, {empName:1, _id: 0}) // to fetch the name of all employees 
+		by default _id:1 is set.
+
+	db.<collection_name>.findOne({<condition>}, {<projection>}) 
+		returns null if condition not match
+		return only one first matched document even multiple match found
+	db.emplouees.findOne({empId: 5}) // all properties of doc. will be listed
+	db.employees.findOne({empId: 5}, {empName:1, _id:0}) // only, empName field will be listed
+
+.pretty() // use to formatted output
+
+Comparison Operators:
+=====================
+$gt/$gte/$lt/$lte
+<field_name> : {$gt: <number>} // number
+Eg: db.employees.find({"salary": {$gt: 40000}}, {'empName:1', 'salary:1'}) 
+	// return name of all employees whose salary > 4000
+
+$ne
+<field_name> : {$ne: <value>} // number / string
+Eg: db.employees.find({"department": {$ne: 'ETA'}}, {'empName:1', 'department:1'})
+
+
+for multiple value check:
+$in
+db.employees.find({department: {$in: ['ETA','IVS']}}, {'empName:1', 'department:1'}) 
+	// return all employees belongs to ETA or IVS department
+db.employees.find({department: {$nin: ['ETA','IVS']}}, {'empName:1', 'department:1'})
+	// return all employees who did not belongs to either of ETA or IVS department
+NOTE: if department field will not exist the it will alos listed
+
+$exists	Syntax: {field: {$exists: ture | false}}
+db.employees.find({depatrment: {$exists: false}})
+	// return all docs who does not have department field
+db.employees.find({department: {$in: ['ETA','IVS'], $exists: true}})
+	// return all employees who did not belongs to either of ETA or IVS department but belons to atleat any other department
+
+$size Syntax: {'array_field_name': } // use to match the size of array
+db.employees.find({'experience' : {$size: 2}}, {empName: 1, experience: 1})
+	// return all docs who have experience array with exactly 2 elements
+
+$regex
+db.employees.find({empName: {$regex: '^J+'}}, {empName: 1}) 
+db.employees.find({empName: /^J+/}, {empName: 1})
+	// return emp whose name stats with 'J'
+db.employees.find({empName: {$regex: '^J+', $options: 'i'}}, {empName: 1}) 
+	// return emp whose name stats with 'J' & 'j'
+db.employees.find({empName: {$in: [/^A+/i, /^E+/i]}}, {empName: 1}) 
+	// return emp whose name stats with 'A', 'a', 'E' & 'e'
+	// we can not use $in and $regex together
+
+Logical Operators:
+==================
+$and/$or/$not
+db.employees.find(
+	{$and: [
+		{department: {$in: ['ETA', 'IVS']}},
+		{salary: {$gt: 30000}}
+	]}, 
+	{empId:1, department:1, salary:1, _id:0}
+)
+
+db.employees.find(
+	{machineId: {$not : {$gt: 1002}}}, 
+	{empName:1, machineId:1, _id:0}
+)
+	// above alos inclue who do not have machineId field
+
+db.employees.find(
+	{machineId: {$lte: 1002}},
+	{empName:1, machineId:1, _id:0}
+)
+	// did the same but exclude those who didn't have machinId field / more ristricted
+
+
+Array Operatins:
+================
+$elemMatch 
+db.employees.find(
+	{'experience.role': 'Technology Lead'},
+	{empName: 1, "experience.role": 1, _id: 1}
+)
+
+	// will return all docs who have 'Technology Lead' value in role field of experience array
+
+Q: find the employees who have 'Technology Lead' role with experience morethan 1 year in same role
+   (we can say in same object)
+Wrong Sol:
+	db.employees.find(
+		{$and: [
+			{'experience.role': 'Technology Lead'},
+			{'experience.roleExperience': {$gt: 1.0}}
+		]},
+		{_id: 0, empName:1, 'experience.role': 1 ,'experience.roelexperience': 1}
+	)
+	// it will match the condition throught the array not in same element of array
+
+Right Sol:
+	db.employees.find(
+		{'experience': 
+			{$elemMatch:
+				{role: 'Technology Lead', roleExperience: {$gt: 1.0}}
+			}
+		},
+		{_id: 0, empName:1, 'experience.role': 1 ,'experience.roelexperience': 1}
+	)
+	// now role & roleExperience will matached form same Object/element of array
+
+$all  // to search two different nested document
+similar to $and
+
+db.employees.find({
+	'experience': {
+		$all: [
+			{$elemMatch: {role: 'Technology Analyst', roleExperience: {lt: 1.0}}},
+			{$elemMatch: {role: 'Senior Systems Engineer', roleExperience: {gt: 1.5}}}
+		] // both condition must match in any order
+	}	
+}, {_id: 0, empName:1, 'experience.role': 1 ,'experience.roelexperience': 1})
+
+// above query can be written with  $and also
+db.employees.find(
+	{$and: [
+		{'experience': 
+			{$elemMatch:
+				{role: 'Technology Lead', roleExperience: {$gt: 1.0}}
+			}
+		},
+		{'experience': 
+			{$elemMatch:
+				{role: 'Senior Systems Engineer', roleExperience: {gt: 1.5}}
+			}
+		}
+	},
+	{_id: 0, empName:1, 'experience.role': 1 ,'experience.roelexperience': 1}
+)
+
+
+Update: atomic operator required
+=======
+db.<collection_name>.updateOne()
+db.<collection_name>.updateMany()
+db.<collection_name>.replaceOne()
+
+updaeOne()
+Syntax: db.<collection_name>.updateOne({<condition>}, {atomic operator: {<vaue to update>}})
+db.employees.updateOne({empId: 6}, {$set: {salary: 42000}}) 
+	// return obj as:
+	{
+		"acknowledge": true,
+		"matchedCount": 1,
+		"modifiedCount": 1 // confirm the update
+	}
+
+
+updateMany()
+Q: update salary of all employees whose department is ETA
+// Synrax is same as updateOne()
+db.employees.updateMany({department: 'ETA', {$set: {salary: 42000}}}) 
+	// return obj as:
+	{
+		"acknowledge": true,
+		"matchedCount": 2,
+		"modifiedCount": 2 // confirm the update
+	}
+
+NOTE: if we made the above query with updaeOne(), only first match doc will get updated.
+
+update() // work as both above, same Syntax
+Q: update the salary of all the employees who are from ETA department to 43000:
+db.employees.update({department:'ETA'}, {$set: {salary: 43000}}) 
+	// return obj as:
+	{
+		"nMatch": 1,
+		"nUpserted": 0,
+		"nModified": 1 // confirm the update
+	}
+NOTE: there will be multiple match but it will work as updateOne() command by default,
+	  will change only first match 
+
+{multi: ture} // will help to use update() command as updateMany() command
+db.employees.update({depatement: 'ETA'}, {$set: {salary: 44000}}, {multi: true})
+
+
+$set // over write the value
+
+{$inc: {<field>: <integral_value>}}
+db.employees.updateMany({department: 'ETA'}, {$inc: {salary: 2000}})
+	// will increment the salary by 2000 of all employees who belongs to ETA dept.
+	// there is no decrement operator insted we can use -ive value
+
+db.employees.updateMany({department: 'ETA'}, {$inc: {salary: -2000}})
+
+to update a value by some % $mul operator can be used
+{$mul: {salary: 1.1}} // inc salary by 10%
+
+db.employees.updateMany({department: 'ETA'}, {$mul: {$salary: 1.1}})
+
+$min / $max Syntax: {$max: <value>}
+Q: Update the value of a field if the field value is less than a specified value
+   Each employee document must have salary 30000 or more
+db.employees.updateMany({}, {$max: 30000})
+	// return Obj as:
+	{
+		"acknowledge": true,
+		"matchedCount": 14,
+		"modifiedCount": 4 // confirm the update
+	} 
+	// Since it update all salary field whose salary is < 30000 by 30000
+
+Similary $min will reduce all values which is > specified value
+
+{$unset: {<field1>:'', <field2>:'', ...}}
+db.employees.updateOne({empId: 1}, {$unset: {department: '', machineId: ''}})
+	// it will remove the key:value pair of department as well as machineId of empId: 1
+
+{upsert: true} if there is no matching document found it will create new document with the given value
+db.employees.update(
+	{department: 'A'},
+	{$set: {salary: 100000}},
+	{upsert: true} // create a new doc if no doc is match
+)
+
+Array Operations:
+-----------------
+
+Adding new value into an existing array:
+$push 
+
+Syntax:
+{$push: {<array_name> :
+	{<field_name1> : <value>},
+	{<fiedl_name2> : <value>}
+}}
+
+db.employees.updateOne({empId: 14}, 
+	{$push: {experience: 
+		{role: 'Senior Systems Engineer', roleExperience: 0.1}
+	}}
+)
+
+$addToSet
+to avoid the duplicate value to push, use $addToSet inseted on $push, Syntax is same.
+
+$each
+to add multiple values inside an array
+db.employees.updateOne(
+	{empId: 14},
+	{$push: {exprience:
+		{$each: [ 
+				{role: "Technology Analyst", roleExperinece: 1.0},
+				{role: "Technology Lead", roleExperinece: 1.0}
+			]}
+	}}
+)
+
+NOTE: if $each is not used, It will add new array inside existing array
+
+$position // Inserting value in array on particular index:
+
+db.employees.updateOne(
+	{empId: 14},
+	{$push:
+		{experience: 
+			{$each: [
+				{role: "Technology Analyst", roleExperinece: 1.0},
+				{role: "Technology Lead", roleExperinece: 1.0}
+			],
+			$position: 0 // insert the values on 0th index
+			}
+		}
+	}
+)
+
+
+Update inside the nested document:
+$
+// $ will access the exact matching obj inside array
+
+Q; update the roleExperiend by 2 year of empId: 1 in Systems Engineer role. 
+db.employees.updateOne(
+	{$ans: [
+		{empId: 1},
+		{'experience.role': 'Systems Engineer'}
+	]},
+	{$set: {'experience.$.roeExperience': 2.0}}
+)
+
+$pop // is used to pop from front as well as back of the array
+Syntax: {$pop: {<array_name>: 1 | -1}} // -1 from front, 1 from back
+
+db.employees.updateOne(
+	{empId: 1},
+	{$pop: {expererinec: -1} // remove 0th index element
+)
+
+$pull -> to remove single element from array
+$pullAll -> to remove multiple element from array
+db.employees.updateOne(
+	{empId: 1},
+	{$pull: {
+		experience: {
+			role: 'Systems Engineer Trainee',
+			roleExperience: 0.4
+		}
+	}}
+)
+
+db.employees.updateOne(
+	{empId: 1},
+	{$pullAll: {
+		experience: [
+			{ role: 'Systems Engineer Trainee', roleExperience: 0.4 },
+			{ role: 'Systems Engineer', roleExperience: 1.0 }
+		]
+	}}
+)
+
+
+Delete:
+=======
+db.<collection_name>.deleteOne()	Syntax: deleteOne({<condition>})
+db.<collection_name>.deleteMany()	Syntax: same as deleteOne()
+
+
+db.employees.deleteOne({empId: 6}) // delete first match doc
+db.employees.deleteOne({department: 'ETA'}) // delete all employees matched doc
+
+
+Aggretation:
+============
+
+pipeline:
+--------
+$match -> $group -> $sort -> $limit -> $projection -> $count
+
+each stage operation output is input for next stage
+all stages are always independent of other
+
+Stage Operator Syntax:
+{ $<stage_name>: expression }
+eg:
+{ $match: { empId: 10 } }
+{ $group: { _id: '$department' } }
+						^- Aggregation Expression, always in quotes preceeded by $ symbol
+{ $match: { _id: '$department', 'count': { $sum: 1 } } }
+											 ^- accumulators
+Single purpose Aggregate functions:
+----------------------------------
+countDocuments({<condition>})
+distinct({field to be uniquely reqired})
+
+db.employees.countDocuments({department: 'ETA'}) // return number
+db.employees.countDocuments({}, {skip: 1, limit: 2}) // return first 2 document after skipping first one
+
+db.employees.distinct({department}) // return all distinct department available in entire collection
+
+$match
+db.employees.aggregate([
+	{$match: {department: {$exists: true}}}
+])
+
+$project
+db.employees.aggregate([
+	{$match: {department: {$exists: true}}},
+	{$project: {_id: 0, empName: 1}} // only give employee name as output
+])
+
+$group
+------
+group by expression which is specified using _id field
+Accumulators are used to include computed results
+Syntax:
+{
+	$group: {
+		_id: <expression>, // Group by expression
+		<field1> : { <accumulator1> : <expression1> },
+		...
+	}
+}
+
+db.employees.aggregate([
+	{$match: {department: {$exists: true}}}, // exclude null departments
+	{$group: {_id: '$department'}} // group by department field
+])
+
+Grouping doc based on nested fiedl and multiple fields:
+-------------------------------------------------------
+based on nested documents
+db.employees.aggregate([
+	{$group: {_id: '$experience.role'}} // experience is array of obj{role, roleExerience} **
+])
+
+based on multiple fields
+db.employees.aggregate([
+	{$group: {_id: {department: '$department'}, {salary: '$salary'}}}
+])
+
+$count
+db.employees.aggregate([{$count: 'noOfEmployees'}])	// output obj like: {"noOfEmployees": 14}
+dp.employees.aggregate([
+	{$group: {_id: '$department'}},
+	{$count: ''noOfDpeartments}
+])
+output: {"noOfDepartments": 8}
+
+$sort/ $limit/ $out
+db.employees.aggregate([
+	{$sort: {salary: -1}}, // sort doc in descending order on salary basis 
+	{$limit: 3}, // filter first 3 value
+	{$out: 'topThreePaidEmployees'} // export into new collection
+]) // will not generate any output, create a new collection with given name
+
+
+$skip
+Q: query third highest payed employee
+db.employee.aggregate([
+	{$sort: {salary: -1}},
+	{$limit: 3},
+	{$skip: 2}
+])
+
+$unwind
+to fetch a particular object form array or nested documents 
+(else we get whole document not part of it)
+It will replace nested array by creating new docs for each value of array and replicated the
+remaining fields for each.
+
+db.employees.aggregate([
+	{$unwind: '$experience'}, // create new docs for each value with unique _id temporarly
+	{$match: {$and: [
+		{$empId: 1},
+		{'experience.role': 'System Engineer'}
+	]}}
+])
+
+NOTE: $unwind create new docs only during query fired, it doesn't make any change in db
+
+Accumulators: ($sum, $avg, $min, $max)
+-------------
+To include computed data in the aggregate query result, we use Accumulators.
+Syntax: "<alias_name>":{$<accumulator_name>: '<expression>'}   // alias_name will become key in doc
+eg: {$avg: 'salary'}
+
+$sum/$avg:
+Q: Fetch the no. of employees and avg salary for each department
+db.employees.aggregate([
+	{$group: {
+		_id: $department,
+		"noOfEmployees": {$sum: 1},
+		"avgSalary": {$avg: '$salary'}
+		}
+	}
+])
+
+Q: Fetch the average experience of employees in each  department
+db.employees.aggregate([
+	{$group: {
+		_id: '$department',
+		"avgExperience": {$avg:{$sum: 'experience.roleExperience'}}
+		}
+	}
+])
+
+$min/ $amx:
+Q: fetch the minimun and maximum salary for each department
+db.employees.aggregate([
+	{$group: {
+		_id: "$department",
+		'minSalary': {$min: '$salary'},
+		'maxSalary': {$max: '$salary'}
+	}}
+])
+
+$push with $group:
+Q: fetch the list of employee's name and salary in array for each department
+db.employees.aggregate([
+	{$group: {
+		_id: '$department',
+		'employeeList': {
+			$push: {
+				employeeName: '$empName',
+				salary: '$salary'
+			}
+		}
+	}}
+])
+
+NOTE: alais_name need not to be in quote
+
+String Operator:
+----------------
+$concat 
+Syntax: {field: {$concat: [expression1, expresson2, ...]}}
+Q: write a query to get value in formate of : employeeData: "empName - department"
+db.employee.aggregate([
+	{$project: {
+		employeeData: {$concat: ['$empName', ' - ', '$department']},
+		_id: 0
+	}}
+])
+NOTE: '$key' of any doc must be in quote always if written in right side
+NOTE:  output contains null also if any of $empName and $department doesn't exist
+to handel null we have $ifNull with $concat
+
+$ifNull
+Syntax: {$isNull: [<expression>, <replacement expression if null>]}
+db.employee.aggregate([
+	{$project: {
+		employeeData: {$concat: [
+			{$ifNull: ['$empName', "NA"]}, 
+			' - ', 
+			{$ifNull: ['$department' "NA"]}
+			]},
+		_id: 0
+	}}
+])
+
+$concatarrays: used to merge arrays
+
+Date Operators:
+===============
+$year : year portion of date
+$month: month portion of date [1-12]
+$dayOfMonth: day of the month [1-31]
+$hour: hour portion of data as a number [0-23]
+$minute: minute portion of a date as number [0-59]
+$second: second portion of a date as number [0-59]
+$milisecond: mimisecond portion of a data as integer [0-999]
+$dayOfYear: day of the year as a number [1-366]
+$dayOfWeek: day of week for a date as number 1[sunday] to 7[saturday]
+$week: week of the year for a datae as number [0-53]
+
+NOTE: mongodb store date in ISODate('1996-06-19') format
+
+db.employees.aggtegate([
+	{$project: {
+		birthYear: {$year: '$dateOfBirth'}
+	}}
+])
+
+$dateToString
+Syntax: 
+{
+	$dateToString: {
+		date: <dateExpression>,
+		format: <format String>,
+		timezone: <tzExpresson>,
+		onNull: <expression>
+	}
+}
+
+db.employees.aggregate([
+	{$project: {
+		'Birthdate': {
+			$dateToString: {
+				date: '$dateOfBirth',
+				format: '%Y-%m-%d'
+				}
+			}
+		}
+	}
+])
+
+NOTE: fromate specifier (%H - Hours, %M - Minutes, %S - Seconds, $L - Miliseconds)
+
+
+Indexes:
+========
+1) what is indexing? (same concept of book index)
+2) Why should we use indexes? (as it is sorted in an order, we need not to check all docs)
+3) Advantages of Indexex. (query become fast)
+4) Create, View and Drop Indexes
+5) Dofferent types of Indexes
+
+creataing indexes:
+------------------
+
+Q: write a query to find all employees whose salary is [4000, 5000].
+db.employees.find({
+	'salary': {$gte: 4000, $lte: 5000}
+})
+
+to check the performance of query, we can run ".explain('executionStats')"
+db.employees.find({
+	'salary': {$gte: 4000, $lte: 5000}
+}).explain('executionStats')
+
+now in executionStats field of output, we can see the totalDocsExamined, it will all before indexing
+
+(inputStage) stage: COLLSCAN -> it examines every docujent of the collection for the given condition
+
+now lets create index on salary:
+db.employees.createIndex({salary: -1}) // -1 for desc, 1 for asc
+// retrn obj of 4 key/vlaue pair which contain number of index before, now etc
+
+Now again run the above query to find employess whose salary is ...
+look the totalDocsExamined in excutionStats, you will find only few docs ware examined this time.
+and (inputStage) stage: IXSCAN this time, means indexed based scanning was done.
+
+getIndexes() : to view existing indexes
+db.employees.getIndexes() // return an array of indexes created on various field
+
+An index is created by defalut on _id field whenever a new collection is created in mongoDB
+
+dropIndex({<index>}):
+db.employees.dropIndex({salary: -1}) 
+// return object of 2 key/value pairs which represent the previous index count
+
+Types of Indexes:
+-----------------
+1) Single field index: Index created on a single field of a collection
+	e.g. - Employees having salary 40000
+		db.employee.createIndex({salary: 1})
+
+2) Compound Index: Index created on two or more fields of a collection
+	e.g. - Employees form ETA department having salary grateer than 40000
+		db.employee.createdIndex({salary: 1, department: 1})
+
+3) Text Index: Allows text search on all fields with string content
+	e.g - searching for employees based on deparatment field (stored string value)
+		db.employee.createIndex({department: 'text'})
+
+
+Multi Key Indexes:
+------------------
+if we create index of a field which value is an array, Mongodb automatically create seperate indexe
+entries for each array element. we do not need to explictly specify the multi key index any where.
+
+
+
+Array Operations:
+=================
+{<array_name>: {$all: [ele1, ele2, ...]}} // element order doesn't matter
+{<array_name>: {$size:3}}
+{<array_name>.<index_no>: { ... }} // way to access element value at any particular index
+{<array_name>: {$slice: 2}} // can used in projection, only first 2 element will projected
